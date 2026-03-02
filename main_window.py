@@ -256,12 +256,14 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(1020, 700)
         self.resize(1200, 780)
         self.setStyleSheet(_STYLESHEET)
+        # Define fonte padrão para toda a janela
+        self.setFont(QFont('Segoe UI', 12))
 
         # State
         self._catalogue: List[GameEntry] = []
         self._filtered: List[GameEntry] = []
-        # Mirrors removed
         self._worker: Optional[InstallWorker] = None
+        self._selected_profile = "aggressive"  # default
 
         self._build_ui()
         self._connect_signals()
@@ -269,6 +271,7 @@ class MainWindow(QMainWindow):
         self._on_load_catalogue()
 
     # ── UI construction ───────────────────────────────────────────────────────
+
 
     def _build_ui(self) -> None:
         root = QWidget()
@@ -293,8 +296,28 @@ class MainWindow(QMainWindow):
         self._load_btn.setMinimumWidth(140)
         self._load_btn.setFont(QFont('Segoe UI', 14, QFont.Bold))
 
+        # Engrenagem + Dropdown de perfil
+        from PySide6.QtWidgets import QComboBox, QToolButton, QMenu
+        from PySide6.QtGui import QIcon
+        self._profile_btn = QToolButton()
+        self._profile_btn.setIcon(QIcon.fromTheme("emblem-system"))
+        self._profile_btn.setToolTip("Configurações de Download")
+        self._profile_btn.setPopupMode(QToolButton.InstantPopup)
+        self._profile_menu = QMenu()
+        self._profile_combo = QComboBox()
+        self._profile_combo.addItem("Agressivo (rápido)", "aggressive")
+        self._profile_combo.addItem("Seguro (compatível)", "safe")
+        self._profile_combo.setCurrentIndex(0)
+        # WidgetAction para inserir o combo no menu
+        from PySide6.QtWidgets import QWidgetAction
+        combo_action = QWidgetAction(self._profile_menu)
+        combo_action.setDefaultWidget(self._profile_combo)
+        self._profile_menu.addAction(combo_action)
+        self._profile_btn.setMenu(self._profile_menu)
+
         top.addWidget(self._search_bar, 7)
         top.addWidget(self._load_btn, 1)
+        top.addWidget(self._profile_btn, 0)
         root_layout.addLayout(top)
 
         # ── Zone B: Main Workspace (70/30 Split) ───────────────────────────
@@ -419,6 +442,11 @@ class MainWindow(QMainWindow):
         self._game_list.currentItemChanged.connect(self._on_game_selected)
         self._browse_btn.clicked.connect(self._on_browse)
         self._download_btn.clicked.connect(self._on_download)
+        self._profile_combo.currentIndexChanged.connect(self._on_profile_changed)
+
+    def _on_profile_changed(self, idx):
+        self._selected_profile = self._profile_combo.currentData()
+        self._set_status(f"Perfil de download: {self._profile_combo.currentText()}")
     def _on_selected_games_changed(self):
         selected_items = self._game_list.selectedItems()
         if not selected_items:
@@ -517,12 +545,22 @@ class MainWindow(QMainWindow):
         self._progress_bar.setFormat("Starting…")
         self._log(f"Iniciando instalação de {len(selected_items)} jogos [{fmt}] para: {install_dir}")
 
+        self._download_btn.setText("Cancel Download")
+        self._download_btn.clicked.disconnect()
+        self._download_btn.clicked.connect(self._on_cancel_download)
+
+        # Removido botão de pausar
+
         def process_next(index):
             if index >= len(selected_items):
                 self._set_busy(False)
                 self._progress_bar.setRange(0, 100)
                 self._progress_bar.setValue(100)
                 self._progress_bar.setFormat("Complete ✓")
+                self._download_btn.setText("Download & Convert")
+                self._download_btn.clicked.disconnect()
+                self._download_btn.clicked.connect(self._on_download)
+                pass  # Removido botão de pausar
                 return
             item = selected_items[index]
             entry = item.data(Qt.ItemDataRole.UserRole)
@@ -533,6 +571,7 @@ class MainWindow(QMainWindow):
                 mirror=mirror,
                 install_dir=Path(dest),
                 fmt=fmt,
+                profile=self._selected_profile,
                 parent=self
             )
             self._worker = worker
@@ -545,6 +584,18 @@ class MainWindow(QMainWindow):
         self._progress_bar.setValue(0)
         self._progress_bar.setFormat("Starting…")
         process_next(0)
+
+    def _on_cancel_download(self):
+        if self._worker:
+            self._worker.cancel()
+        self._set_busy(False)
+        self._progress_bar.setFormat("Cancelado")
+        self._download_btn.setText("Download & Convert")
+        self._download_btn.clicked.disconnect()
+        self._download_btn.clicked.connect(self._on_download)
+        pass  # Removido botão de pausar
+
+    # Removido método de pausar download
 
     @Slot(int, int)
     def _on_progress(self, done: int, total: int) -> None:

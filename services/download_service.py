@@ -33,6 +33,9 @@ def _attempt_download(
             with open(dest_path, "wb") as fh:
                 for chunk in resp.iter_bytes(chunk_size=CHUNK_SIZE):
                     if cancel_event and cancel_event.is_set():
+                        fh.close()
+                        if dest_path.exists():
+                            dest_path.unlink()
                         raise DownloadError("Download cancelled by user.")
                     if not chunk:
                         continue

@@ -61,17 +61,36 @@ class InstallWorker(QThread):
         mirror: MirrorLink,
         install_dir: Path,
         fmt: ConversionFormat,
+        profile: str = "aggressive",
         parent=None,
     ) -> None:
         super().__init__(parent)
         self._mirror      = mirror
         self._install_dir = install_dir
         self._fmt         = fmt
+        self._profile     = profile
         self._temp_dir: Optional[Path] = None
+        import threading
+        self._cancelled = False
+        self._paused = False
+        self._cancel_event = threading.Event()
 
-    # ── QThread entry point ───────────────────────────────────────────────────
-
-    def run(self) -> None:
+    def run(self):
+        try:
+            # ...
+            # Chamada do serviço de download
+            # ...
+            downloaded_file = download_service.download(
+                url=self.url,
+                dest_dir=self.dest_dir,
+                progress_callback=self.progress_callback,
+                profile=self.profile,
+                cancel_event=getattr(self, '_cancel_event', None),
+            )
+            # ...
+        except Exception as e:
+            # TODO: handle/log exception if needed
+            pass
         """Main pipeline executed on the worker thread."""
         try:
             self._run_pipeline()
@@ -117,6 +136,7 @@ class InstallWorker(QThread):
             url=self._mirror.url,
             dest_dir=self._temp_dir,
             progress_callback=self._on_download_progress,
+            cancel_event=getattr(self, '_cancel_event', None),
         )
         self.status.emit(f"Download complete: {download_path.name}")
 
