@@ -107,8 +107,4 @@ ROMToolError
 - Temp files are written to an isolated UUID-named subdirectory of the system
   temp folder and cleaned up on success.
 
----
 
-## License
-
-MIT – see LICENSE (add your own).
